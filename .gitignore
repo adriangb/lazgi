@@ -1,0 +1,15 @@
+/*
+
+!/.gitignore
+!/.github/
+!/.flake8
+!/.pre-commit-config.yaml
+!/lazgi/
+!/tests/
+!/Makefile
+!/pyproject.toml
+!/README.md
+!/LICENSE.txt
+
+**/__pycache__
+**/.DS_Store
