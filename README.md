@@ -36,6 +36,9 @@ When it's lifespan is triggered, it calls a user defined async context manager t
 This example employs so called "pure" dependency injection to initialize a Starlette application with a database dependency.
 
 ```python
+from contextlib import asynccontextmanager
+from functools import partial
+from typing import AsyncIterator
 from lazgi import LazyApp
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -45,14 +48,15 @@ from starlette.routing import Route
 # provided by the database driver
 class DBConnection:
     async def execute(self, query: str) -> None:
-        ...
+        print(query)
 
 @asynccontextmanager
-async def connect() -> DBConnection:
+async def connect() -> AsyncIterator[DBConnection]:
     yield DBConnection()
 
 # user code, maybe in some endpoints.py file
 async def endpoint(request: Request, db: DBConnection) -> Response:
+    await db.execute("SELECT 1!")
     return Response()
 
 # user code, in main.py or app.py
@@ -60,8 +64,7 @@ async def endpoint(request: Request, db: DBConnection) -> Response:
 # with their appropriate types
 def create_app(db: DBConnection) -> Starlette:
     return Starlette(
-        routes=[Route("/", partial(endpoint, db=db))],
-        middleware=[Middleware(BackgroundTaskMiddleware)]
+        routes=[Route("/", partial(endpoint, db=db))]
     )
 
 # user code, probably in main.py
@@ -69,7 +72,7 @@ def create_app(db: DBConnection) -> Starlette:
 # where we create all dependencies and "bind them"
 # (in this case that just means passing them into create_app)
 @asynccontextmanager
-async def main() -> Starlette:
+async def main() -> AsyncIterator[Starlette]:
     async with connect() as db:
         yield create_app(db)
 
