@@ -23,7 +23,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install and configure Poetry
-        uses: snok/install-poetry@v1.3.1
+        uses: snok/install-poetry@v1.2.0
         with:
           version: 1.1.13
       - name: Lint
