@@ -23,9 +23,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install and configure Poetry
-        uses: snok/install-poetry@v1.2.0
+        uses: snok/install-poetry@v1.3.3
         with:
-          version: 1.1.13
+          version: 1.2.0
       - name: Lint
         run: make lint
   test:
@@ -46,7 +46,9 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: Install and configure Poetry
-        uses: snok/install-poetry@v1.2.0
+        uses: snok/install-poetry@v1.3.3
+        with:
+          version: 1.2.0
       - name: Test
         run: make test
   version-check:
