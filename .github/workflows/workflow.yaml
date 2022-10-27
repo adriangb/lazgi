@@ -46,7 +46,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: Install and configure Poetry
-        uses: snok/install-poetry@v1.3.1
+        uses: snok/install-poetry@v1.2.0
       - name: Test
         run: make test
   version-check:
