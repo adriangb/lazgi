@@ -10,6 +10,7 @@
 !/pyproject.toml
 !/README.md
 !/LICENSE.txt
+!/uv.lock
 
 **/__pycache__
 **/.DS_Store
