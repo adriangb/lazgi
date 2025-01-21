@@ -9,48 +9,76 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   lint:
     name: Run Linters
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.7", "3.8", "3.9", "3.10"]
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install and configure Poetry
-        uses: snok/install-poetry@v1.3.3
-        with:
-          version: 1.2.0
+      - name: Install uv
+        run: |
+          pip install uv
+      - name: Install dependencies
+        run: |
+          uv pip install -r requirements.txt
       - name: Lint
         run: make lint
+
   test:
     name: Run Tests
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.7", "3.8", "3.9", "3.10"]
-        os: ["windows-latest", "macos-latest", "ubuntu-latest"]
+        include:
+          # test python versions
+          - python: "3.8"
+            os: ubuntu-latest
+          - python: "3.9"
+            os: ubuntu-latest
+          - python: "3.10"
+            os: ubuntu-latest
+          - python: "3.11"
+            os: ubuntu-latest
+          - python: "3.12"
+            os: ubuntu-latest
+          # test OSs
+          - python: "3.x"
+            os: macos-latest
+          - python: "3.x"
+            os: windows-latest
     defaults:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python }}
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python }}
-      - name: Install and configure Poetry
-        uses: snok/install-poetry@v1.3.3
-        with:
-          version: 1.2.0
+      - name: Install uv
+        run: |
+          pip install uv
+      - name: Install dependencies
+        run: |
+          uv pip install -r requirements.txt
+          uv pip install pytest coverage
       - name: Test
-        run: make test
+        run: |
+          coverage run -m pytest -v tests
+          coverage xml
+
   version-check:
     name: Check Version Bump
     if: github.ref != 'refs/heads/main'
@@ -59,47 +87,60 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           path: current
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           ref: main
           path: main
-      - name: Install and configure Poetry
-        uses: snok/install-poetry@v1.3.1
-        with:
-          version: 1.1.13
+      - name: Install uv
+        run: pip install uv
       - name: Check version bump
         run: |
           cd $GITHUB_WORKSPACE/current
-          NEW_VERSION=$(poetry version -s)
+          NEW_VERSION=$(python setup.py --version)
           cd $GITHUB_WORKSPACE/main
-          OLD_VERSION=$(poetry version -s)
-          python -c "from packaging import version;assert version.parse(\"${NEW_VERSION}\") > version.parse(\"${OLD_VERSION}\"), \"❌ Bad version bump detected: you must bump the version in pyproject.toml\""
+          OLD_VERSION=$(python setup.py --version)
+          python -c "from packaging import version;assert version.parse(\"${NEW_VERSION}\") > version.parse(\"${OLD_VERSION}\"), \"❌ Bad version bump detected: you must bump the version in setup.py\""
           python -c "print(\"✅ Version will be bumped from ${OLD_VERSION} to ${NEW_VERSION}\")"
+
+  # https://github.com/marketplace/actions/alls-green#why used for branch protection checks
+  check:
+    if: always()
+    needs: ["lint", "test", "version-check"]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Decide whether the needed jobs succeeded or failed
+        uses: re-actors/alls-green@release/v1
+        with:
+          allowed-skips: ${{ github.ref == 'refs/heads/main' && 'version-check' }}
+          jobs: ${{ toJSON(needs) }}
+
   pypi:
-    if: github.ref == 'refs/heads/main' && github.event_name != 'schedule'
+    if: github.ref == 'refs/heads/main'
     name: 🚀 PyPi Release 📦
     runs-on: ubuntu-latest
-    needs: ["test", "lint"]
+    needs: ["check"]
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Set up Python
-        uses: actions/setup-python@v2
-      - name: Install and configure Poetry
-        uses: snok/install-poetry@v1.3.1
-        with:
-          version: 1.1.13
-      - name: Release on PyPi
+        uses: actions/setup-python@v4
+      - name: Install uv and build tools
+        run: |
+          pip install uv build twine
+      - name: Build and publish
         continue-on-error: true  # allow pushes to main that don't release
         id: pypi
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
         run: |
-          PACKAGE_VERSION=$(poetry version -s)
+          PACKAGE_VERSION=$(python setup.py --version)
           echo "package_version=$PACKAGE_VERSION" >> $GITHUB_ENV
           printf "\nSee this release on GitHub: [v$PACKAGE_VERSION](https://github.com/$GITHUB_REPOSITORY/releases/tag/$PACKAGE_VERSION)\n" >> README.md
-          poetry config pypi-token.pypi "${{ secrets.PYPI_TOKEN }}"
-          poetry publish --build
+          python -m build
+          twine upload dist/*
       - name: 🚀 Create GitHub Release 😺
         uses: ncipollo/release-action@v1
         if: steps.pypi.outcome == 'success'
